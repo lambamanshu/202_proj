@@ -1,0 +1,12 @@
+{
+  "name": "kwn-al-cu-dashboard",
+  "version": "1.0.0",
+  "description": "KWN Al-Cu Precipitation Hardening Simulator Dashboard",
+  "scripts": {
+    "dev": "serve public",
+    "build": "echo 'No build needed for static site'"
+  },
+  "devDependencies": {
+    "serve": "^14.0.1"
+  }
+}
