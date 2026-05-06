@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KWN Al-Cu Precipitation Hardening Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+*{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:#08090f;
+  --surface:#0f1018;
+  --card:#151620;
+  --border:#1e2035;
+  --gp:#60A5FA;
+  --th2:#A78BFA;
+  --th1:#F472B6;
+  --th:#FB923C;
+  --hv:#FBBF24;
+  --peak:#F87171;
+  --txt:#e2e4f0;
+  --muted:#6b7080;
+  --accent:#3b82f6;
+  --green:#34d399;
+  --red:#f87171;
+}
+
+body{
+  background:var(--bg);
+  color:var(--txt);
+  font-family:'IBM Plex Sans',sans-serif;
+  font-size:13px;
+  min-height:100vh;
+}
+
+.mono{font-family:'JetBrains Mono',monospace;}
+
+/* ── Layout ───────────────────────────────────────── */
+.dash{
+  display:grid;
+  grid-template-columns:240px 1fr;
+  min-height:100vh;
+}
+
+/* ── Sidebar ──────────────────────────────────────── */
+.sidebar{
+  background:var(--surface);
+  border-right:1px solid var(--border);
+  padding:16px 14px;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  overflow-y:auto;
+}
+
+.sidebar-title{
+  font-size:11px;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  color:var(--muted);
+  padding-bottom:4px;
+  border-bottom:1px solid var(--border);
+}
+
+.ctrl-group{display:flex;flex-direction:column;gap:6px;}
+
+.ctrl-label{
+  font-size:11px;
+  color:var(--muted);
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+
+.ctrl-val{
+  color:var(--txt);
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;
+}
+
+input[type=range]{
+  width:100%;
+  height:3px;
+  -webkit-appearance:none;
+  background:var(--border);
+  border-radius:2px;
+  outline:none;
+  cursor:pointer;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;
+  width:12px;height:12px;
+  border-radius:50%;
+  background:var(--accent);
+  border:2px solid var(--bg);
+  cursor:pointer;
+}
+input[type=range]::-moz-range-thumb{
+  width:12px;height:12px;
+  border-radius:50%;
+  background:var(--accent);
+  border:2px solid var(--bg);
+  cursor:pointer;
+}
+
+.run-btn{
+  background:var(--accent);
+  color:#fff;
+  border:none;
+  border-radius:6px;
+  padding:10px 0;
+  font-size:13px;
+  font-weight:600;
+  cursor:pointer;
+  letter-spacing:.03em;
+  transition:opacity .15s;
+  font-family:'IBM Plex Sans',sans-serif;
+}
+.run-btn:hover{opacity:.85;}
+.run-btn.running{
+  background:#334155;
+  color:var(--muted);
+  cursor:not-allowed;
+}
+
+.phase-legend{display:flex;flex-direction:column;gap:5px;padding:4px 0;}
+
+.phase-row{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  font-size:11px;
+  color:var(--muted);
+  transition:opacity .2s;
+}
+
+.phase-dot{
+  width:8px;height:8px;
+  border-radius:50%;
+  flex-shrink:0;
+}
+
+.phase-row.active{color:var(--txt);}
+
+.info-block{
+  font-size:10px;
+  color:var(--muted);
+  line-height:1.75;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:5px;
+  padding:8px 10px;
+}
+
+/* ── Main area ────────────────────────────────────── */
+.main{
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+
+.top-bar{
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  padding:10px 20px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-shrink:0;
+}
+
+.logo{
+  font-family:'JetBrains Mono',monospace;
+  font-size:13px;
+  font-weight:600;
+  color:var(--txt);
+}
+.logo span{color:var(--accent);}
+
+.status-row{display:flex;gap:10px;flex-wrap:wrap;}
+
+.stat-pill{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:20px;
+  padding:4px 12px;
+  font-size:11px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.stat-pill-label{color:var(--muted);}
+.stat-pill-val{
+  font-family:'JetBrains Mono',monospace;
+  font-weight:600;
+}
+
+/* ── 2×2 plot grid ────────────────────────────────── */
+.content{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  grid-template-rows:auto auto;
+  gap:1px;
+  background:var(--border);
+  flex:1;
+  min-height:0;
+}
+
+.panel{
+  background:var(--bg);
+  position:relative;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+}
+
+.panel-hdr{
+  padding:10px 16px 8px;
+  border-bottom:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-shrink:0;
+}
+
+.panel-title{
+  font-size:11px;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  color:var(--muted);
+}
+
+.panel-tag{
+  font-size:10px;
+  padding:2px 7px;
+  border-radius:10px;
+  background:var(--card);
+  border:1px solid var(--border);
+  color:var(--muted);
+  font-family:'JetBrains Mono',monospace;
+}
+
+.plot-wrap{
+  position:relative;
+  flex:1;
+  min-height:180px;
+  padding:8px 8px 4px;
+}
+
+canvas.plot{
+  width:100% !important;
+  height:100% !important;
+  display:block;
+}
+
+/* ── Microstructure panel ─────────────────────────── */
+.micro-wrap{
+  padding:10px 14px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  flex:1;
+}
+
+canvas#micro{
+  border-radius:6px;
+  background:#060810;
+  width:100%;
+  display:block;
+  cursor:crosshair;
+  flex-shrink:0;
+}
+
+.micro-slider-row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+
+.micro-info{
+  font-size:10px;
+  color:var(--muted);
+  line-height:1.6;
+  min-height:28px;
+}
+
+/* ── Bottom bar ───────────────────────────────────── */
+.bottom-bar{
+  background:var(--surface);
+  border-top:1px solid var(--border);
+  padding:8px 20px;
+  display:flex;
+  gap:20px;
+  align-items:center;
+  flex-shrink:0;
+  flex-wrap:wrap;
+}
+
+.metric{display:flex;align-items:baseline;gap:5px;}
+.metric-val{
+  font-family:'JetBrains Mono',monospace;
+  font-size:14px;
+  font-weight:600;
+}
+.metric-unit{font-size:10px;color:var(--muted);}
+.metric-label{
+  font-size:10px;
+  color:var(--muted);
+  text-transform:uppercase;
+  letter-spacing:.08em;
+}
+.metric-sep{
+  width:1px;
+  height:28px;
+  background:var(--border);
+}
+
+/* ── Idle overlay ─────────────────────────────────── */
+.idle-msg{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-direction:column;
+  gap:8px;
+  color:var(--muted);
+  font-size:12px;
+  pointer-events:none;
+  background:var(--bg);
+  z-index:2;
+}
+
+.idle-dot{
+  width:40px;height:40px;
+  border-radius:50%;
+  border:1px dashed var(--border);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:18px;
+}
+
+/* ── Scrollbar styling ────────────────────────────── */
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+</style>
+</head>
+<body>
+
+<div class="dash">
+
+  <!-- ════════════════════════════════ SIDEBAR ════════════════════════════ -->
+  <div class="sidebar">
+
+    <div class="sidebar-title">KWN Simulation — Al-Cu</div>
+
+    <div class="ctrl-group">
+      <div class="ctrl-label">
+        Aging temperature
+        <span class="ctrl-val" id="lbl-T">190 °C</span>
+      </div>
+      <input type="range" id="sl-T" min="120" max="280" value="190" step="5">
+    </div>
+
+    <div class="ctrl-group">
+      <div class="ctrl-label">
+        Aging time (max)
+        <span class="ctrl-val" id="lbl-t">200 h</span>
+      </div>
+      <input type="range" id="sl-t" min="10" max="500" value="200" step="10">
+    </div>
+
+    <div class="ctrl-group">
+      <div class="ctrl-label">
+        Cu content
+        <span class="ctrl-val" id="lbl-C">4.0 wt%</span>
+      </div>
+      <input type="range" id="sl-C" min="1" max="6" value="4" step="0.5">
+    </div>
+
+    <div class="ctrl-group">
+      <div class="ctrl-label">
+        Resolution
+        <span class="ctrl-val" id="lbl-N">800 steps</span>
+      </div>
+      <input type="range" id="sl-N" min="200" max="2000" value="800" step="200">
+    </div>
+
+    <button class="run-btn" id="run-btn" onclick="runSim()">▶ Run Simulation</button>
+
+    <div class="sidebar-title">Active phases</div>
+    <div class="phase-legend">
+      <div class="phase-row" id="ph-GP">
+        <span class="phase-dot" style="background:#60A5FA"></span>GP zones
+      </div>
+      <div class="phase-row" id="ph-th2">
+        <span class="phase-dot" style="background:#A78BFA"></span>θ'' (theta double prime)
+      </div>
+      <div class="phase-row" id="ph-th1">
+        <span class="phase-dot" style="background:#F472B6"></span>θ' (theta prime)
+      </div>
+      <div class="phase-row" id="ph-th">
+        <span class="phase-dot" style="background:#FB923C"></span>θ (equilibrium)
+      </div>
+    </div>
+
+    <div class="sidebar-title">Precipitation sequence</div>
+    <div class="info-block">
+      Quenched Al-Cu matrix<br>
+      → GP zones (coherent)<br>
+      → θ'' (coherent disc)<br>
+      → θ' (semi-coherent disc)<br>
+      → θ (equilibrium, incoherent)<br><br>
+      Peak hardness occurs at maximum θ''/θ' volume fraction before the
+      Orowan bypass→coarsening transition takes over.
+    </div>
+
+    <div class="sidebar-title">Model</div>
+    <div class="info-block">
+      KWN mean-field · CNT nucleation<br>
+      Gibbs-Thomson growth · LSW coarsening<br>
+      Dispersed Barrier Hardening (shearing + Orowan)<br>
+      Quadratic superposition of phase contributions
+    </div>
+
+  </div><!-- /sidebar -->
+
+  <!-- ════════════════════════════════ MAIN ════════════════════════════════ -->
+  <div class="main">
+
+    <!-- Top bar -->
+    <div class="top-bar">
+      <div class="logo">KWN / <span>Al-Cu</span> precipitation hardening</div>
+      <div class="status-row">
+        <div class="stat-pill">
+          <span class="stat-pill-label">Peak HV</span>
+          <span class="stat-pill-val" id="pill-HV" style="color:#FBBF24">—</span>
+        </div>
+        <div class="stat-pill">
+          <span class="stat-pill-label">Peak time</span>
+          <span class="stat-pill-val" id="pill-t" style="color:#60A5FA">—</span>
+        </div>
+        <div class="stat-pill">
+          <span class="stat-pill-label">Max f</span>
+          <span class="stat-pill-val" id="pill-f" style="color:#A78BFA">—</span>
+        </div>
+        <div class="stat-pill">
+          <span class="stat-pill-label">Max r̄</span>
+          <span class="stat-pill-val" id="pill-r" style="color:#F472B6">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2×2 grid -->
+    <div class="content">
+
+      <!-- Panel 1: Hardness -->
+      <div class="panel">
+        <div class="panel-hdr">
+          <span class="panel-title">Hardness evolution</span>
+          <span class="panel-tag">HV vs time</span>
+        </div>
+        <div class="plot-wrap">
+          <canvas class="plot" id="cvHV"
+            role="img"
+            aria-label="Vickers hardness vs aging time on logarithmic time scale">
+          </canvas>
+          <div class="idle-msg" id="idle-hv">
+            <div class="idle-dot">⚙</div>
+            <span>run simulation</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel 2: Radius -->
+      <div class="panel">
+        <div class="panel-hdr">
+          <span class="panel-title">Mean precipitate radius</span>
+          <span class="panel-tag">r̄ (nm) vs time</span>
+        </div>
+        <div class="plot-wrap">
+          <canvas class="plot" id="cvR"
+            role="img"
+            aria-label="Mean precipitate radius in nanometres vs aging time">
+          </canvas>
+          <div class="idle-msg" id="idle-r">
+            <div class="idle-dot">⚙</div>
+            <span>run simulation</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel 3: Volume fraction -->
+      <div class="panel">
+        <div class="panel-hdr">
+          <span class="panel-title">Volume fraction</span>
+          <span class="panel-tag">f (%) vs time</span>
+        </div>
+        <div class="plot-wrap">
+          <canvas class="plot" id="cvF"
+            role="img"
+            aria-label="Volume fraction percentage vs aging time">
+          </canvas>
+          <div class="idle-msg" id="idle-f">
+            <div class="idle-dot">⚙</div>
+            <span>run simulation</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel 4: Microstructure -->
+      <div class="panel">
+        <div class="panel-hdr">
+          <span class="panel-title">Microstructure view</span>
+          <span class="panel-tag" id="micro-time-tag">t = —</span>
+        </div>
+        <div class="micro-wrap">
+          <canvas id="micro" height="170"
+            role="img"
+            aria-label="Schematic 2D microstructure showing precipitate shapes and sizes at the selected time">
+          </canvas>
+          <div class="micro-slider-row">
+            <span style="font-size:10px;color:var(--muted)">Inspect time</span>
+            <input type="range" id="sl-inspect" min="0" max="100" value="50" step="1" style="flex:1">
+            <span class="ctrl-val mono" id="lbl-inspect" style="font-size:10px;min-width:44px">50%</span>
+          </div>
+          <div class="micro-info" id="micro-info">
+            Precipitates drawn schematically — size proportional to mean radius
+          </div>
+          <div class="idle-msg" id="idle-micro">
+            <div class="idle-dot">⚙</div>
+            <span>run simulation</span>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /content grid -->
+
+    <!-- Bottom info bar -->
+    <div class="bottom-bar">
+      <div class="metric">
+        <span class="metric-label">D (190°C)</span>
+      </div>
+      <div class="metric">
+        <span class="metric-val mono" style="color:#60A5FA;font-size:11px">2.98×10⁻²⁰</span>
+        <span class="metric-unit">m²/s</span>
+      </div>
+      <div class="metric-sep"></div>
+      <div class="metric">
+        <span class="metric-label">r*(θ'', 190°C)</span>
+      </div>
+      <div class="metric">
+        <span class="metric-val mono" style="color:#A78BFA;font-size:11px">0.565</span>
+        <span class="metric-unit">nm</span>
+      </div>
+      <div class="metric-sep"></div>
+      <div class="metric">
+        <span class="metric-label">Model</span>
+      </div>
+      <div class="metric">
+        <span class="metric-val mono" style="color:var(--muted);font-size:11px">KWN / CNT / LSW / DBH</span>
+      </div>
+      <div class="metric-sep"></div>
+      <div class="metric">
+        <span class="metric-label">System</span>
+      </div>
+      <div class="metric">
+        <span class="metric-val mono" style="color:var(--muted);font-size:11px">Al-4wt%Cu (binary)</span>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /dash -->
+
+
+<!-- ═══════════════════════════════ SIMULATION ENGINE ═══════════════════════ -->
+<script>
+"use strict";
+
+/* ── Physical constants ───────────────────────────────────────────────── */
+const R    = 8.314;
+const kB   = 1.38065e-23;
+const NA   = 6.02214e23;
+const Vm   = 1.66e-5;    // molar volume Al  [m³/mol]
+const b    = 2.86e-10;   // Burgers vector   [m]
+const mu   = 26.5e9;     // shear modulus    [Pa]
+const nu   = 0.34;       // Poisson ratio
+const M_T  = 3.06;       // Taylor factor
+const Cp_p = 0.33;       // Cu mol frac in Al₂Cu precipitate
+const D0   = 6.5e-5;     // diffusion pre-exp [m²/s]
+const Qd   = 136000;     // activation energy Cu in Al [J/mol]
+
+const K_SHEAR   = 500e6; // Dispersed Barrier Hardening coefficient [Pa]
+const MAX_DEP   = 0.08;  // max supersaturation fraction consumed per step
+const HV0       = 45.0;  // base hardness annealed Al [HV]
+
+/* ── Phase definitions ──────────────────────────────────────────────────
+   Fields: nm, lb, Ce0, T0, dH, gm, fh, Ns, rtr, Tlo, Thi, col, pid
+   Ce0  = equilibrium composition at T0    [mol frac]
+   T0   = van't Hoff reference temperature [K]
+   dH   = solvus enthalpy                  [J/mol]
+   gm   = interfacial energy               [J/m²]
+   fh   = heterogeneous nucleation factor
+   Ns   = nucleation site density          [m⁻³]
+   rtr  = shearing→Orowan transition radius [m]
+   Tlo/Thi = activity temperature window  [K]
+   col  = hex colour
+   pid  = DOM element id for phase legend
+──────────────────────────────────────────────────────────────────────── */
+const PHASES = [
+  { nm:"GP",  lb:"GP zones", Ce0:0.0057, T0:463, dH:6000,  gm:0.060, fh:1.00, Ns:1e25, rtr:3e-9,  Tlo:293, Thi:460, col:"#60A5FA", pid:"ph-GP"  },
+  { nm:"th2", lb:"θ''",      Ce0:0.0068, T0:463, dH:12000, gm:0.060, fh:1.00, Ns:1e24, rtr:4e-9,  Tlo:370, Thi:510, col:"#A78BFA", pid:"ph-th2" },
+  { nm:"th1", lb:"θ'",       Ce0:0.0085, T0:463, dH:18000, gm:0.150, fh:0.05, Ns:1e22, rtr:8e-9,  Tlo:430, Thi:580, col:"#F472B6", pid:"ph-th1" },
+  { nm:"th",  lb:"θ",        Ce0:0.0049, T0:463, dH:28000, gm:0.400, fh:0.01, Ns:1e20, rtr:20e-9, Tlo:490, Thi:820, col:"#FB923C", pid:"ph-th"  },
+];
+
+/* ── Thermodynamic / kinetic helpers ──────────────────────────────────── */
+
+/** Van't Hoff equilibrium solubility: Ce(T) = Ce0·exp(-dH/R·(1/T−1/T0)) */
+function ceq(ph, T) {
+  return ph.Ce0 * Math.exp(-ph.dH / R * (1 / T - 1 / ph.T0));
+}
+
+/** Arrhenius diffusivity of Cu in Al. D(190°C) ≈ 2.98×10⁻²⁰ m²/s */
+function diff(T) {
+  return D0 * Math.exp(-Qd / (R * T));
+}
+
+/** Gibbs-Thomson critical radius: r* = 2γVm / (RT·ln(Cm/Ce)) */
+function rCrit(gm, T, Cm, Ce) {
+  if (Cm <= Ce || Ce <= 0) return Infinity;
+  const ls = Math.log(Cm / Ce);
+  return ls > 0 ? 2 * gm * Vm / (R * T * ls) : Infinity;
+}
+
+/** Classical Nucleation Theory rate J = Z·β·Nsites·exp(−ΔG*//**kT) with heterogeneous factor fh */
+function jRate(ph, rc, T, Cm, Ce, D) {
+  if (Cm <= Ce || rc === Infinity || rc <= 0) return 0;
+  const ls   = Math.log(Math.max(Cm / Ce, 1 + 1e-12));
+  const dG   = (16 * Math.PI / 3) * ph.gm ** 3 * Vm ** 2 / (R * T * ls) ** 2 * ph.fh;
+  const Z    = Math.max((Vm / (NA * 2 * Math.PI * rc ** 3)) * Math.sqrt(ph.gm * ph.fh / (kB * T)), 1e-30);
+  const beta = 4 * Math.PI * rc ** 2 * D * Cm / b ** 4;
+  const ex   = -dG / (kB * T);
+  if (ex < -700) return 0;
+  return Math.max(Z * beta * ph.Ns * Math.exp(ex), 0);
+}
+/** Diffusion-controlled growth dr/dt with Gibbs-Thomson capillarity */
+function growthRate(r, D, Cm, Ce, gm, T) {
+  if (r <= 0) return 0;
+  const Cr = Ce * Math.exp(Math.min(2 * gm * Vm / (R * T * r), 50));
+  const dn = Cp_p - Cr;
+  if (dn <= 1e-6) return 0;
+  return D * (Cm - Cr) / (r * dn);
+}
+
+/** LSW coarsening constant K: d(r³)/dt = K */
+function lswK(gm, T, Ce, D) {
+  return 8 * gm * Vm ** 2 * D * Ce / (9 * R * T);
+}
+
+/* ── Strengthening models ─────────────────────────────────────────────── */
+
+/** Particle shearing (coherent, r < r_trans): τ = K_SHEAR·√f */
+function tauShear(f) {
+  return f > 0 ? Math.min(K_SHEAR * Math.sqrt(f), 4e8) : 0;
+}
+
+/** Orowan bypass (non-shearable, r ≥ r_trans) via inter-particle gap λ */
+function tauOrowan(f, r) {
+  if (f <= 0 || r <= 0) return 0;
+  const lam = Math.max(2 * r * (Math.sqrt(Math.PI / (3 * f)) - 1), 2 * b);
+  const ln  = Math.log(Math.max(2 * r / b, 1.1));
+  return Math.min(0.4 * M_T * mu * b / (Math.PI * lam * Math.sqrt(1 - nu)) * ln, 4e8);
+}
+
+/** Quadratic superposition of all phase contributions → HV */
+function computeHV(states) {
+  let tsq = 0;
+  for (const s of states) {
+    if (s.f < 1e-10 || s.r <= 0) continue;
+    const t = s.r < s.rtr ? tauShear(s.f) : tauOrowan(s.f, s.r);
+    tsq += t * t;
+  }
+  return HV0 + Math.sqrt(tsq) / 3e6;
+}
+
+/* ── KWN simulation ───────────────────────────────────────────────────── */
+
+/**
+ * Run a single isothermal KWN mean-field simulation.
+ *
+ * @param {number} T_C      - Aging temperature [°C]
+ * @param {number} tmax_h   - Total aging time [h]
+ * @param {number} nSteps   - Number of time integration steps
+ * @param {number} C0       - Nominal Cu mole fraction
+ * @returns {Object}        - Simulation results object
+ *
+ * Key implementation:
+ *   1. Nucleation-growth DECOUPLING — dr/dt applies to existing particles
+ *      only; dN is added to N without modifying r̄ (prevents r being dragged
+ *      back to r* when J is large).
+ *   2. Solute conservation limiter — caps dN per step to MAX_DEP × available
+ *      supersaturation, preventing instantaneous matrix depletion.
+ */
+function simulate(T_C, tmax_h, nSteps, C0) {
+  const T    = T_C + 273.15;
+  const D    = diff(T);
+  const tmax = tmax_h * 3600;
+
+  // Logarithmic time array (fine resolution at early times)
+  const tarr = [];
+  for (let i = 0; i < nSteps; i++) {
+    tarr.push(Math.pow(10, Math.log10(1) + (Math.log10(tmax) - Math.log10(1)) * i / (nSteps - 1)));
+  }
+  const dtarr = tarr.map((t, i) => i === 0 ? t : t - tarr[i - 1]);
+
+  // Equilibrium compositions and activity flags
+  const Cearr  = PHASES.map(ph => ceq(ph, T));
+  const active = PHASES.map((ph, i) => ph.Tlo <= T && T <= ph.Thi && Cearr[i] < C0);
+
+  // Running state
+  const rNow = new Float64Array(4);
+  const nNow = new Float64Array(4);
+  const fNow = new Float64Array(4);
+
+  // Output arrays (one value per step per phase)
+  const rOut = Array.from({length: 4}, () => new Float64Array(nSteps));
+  const fOut = Array.from({length: 4}, () => new Float64Array(nSteps));
+  const nOut = Array.from({length: 4}, () => new Float64Array(nSteps));
+
+  let Cm = C0;
+
+  // ── Time integration ─────────────────────────────────────────────────
+  for (let s = 0; s < nSteps; s++) {
+    const dt = dtarr[s];
+
+    // Mass balance: update matrix composition
+    const ftot = fNow.reduce((a, v) => a + v, 0);
+    let ceMin = 1e-6;
+    for (let i = 0; i < 4; i++) if (active[i] && Cearr[i] < ceMin) ceMin = Cearr[i];
+    Cm = Math.min(Math.max(C0 - ftot * Cp_p, ceMin * 0.5), C0);
+
+    for (let i = 0; i < 4; i++) {
+      if (!active[i]) continue;
+      const ph = PHASES[i];
+      const Ce = Cearr[i];
+      let r = rNow[i];
+      let N = nNow[i];
+
+      // (A) Grow existing particles
+      if (N >= 1 && r > 0) {
+        if (Cm > Ce) {
+          // Diffusion-controlled growth
+          const rc = rCrit(ph.gm, T, Cm, Ce);
+          const dr = growthRate(r, D, Cm, Ce, ph.gm, T);
+          const rn = r + dr * dt;
+          if (rn < rc * 0.3 && dr < 0) { N = 0; r = 0; }
+          else r = Math.max(rn, 1e-11);
+        } else {
+          // LSW coarsening: cube-root growth law, N decreases
+          const K  = lswK(ph.gm, T, Ce, D);
+          const r3 = r ** 3 + K * dt;
+          r = r3 > 0 ? Math.cbrt(r3) : r;
+          if (r > 0 && fNow[i] > 0) N = fNow[i] / (4 / 3 * Math.PI * r ** 3);
+        }
+      }
+
+      // (B) Nucleation — KEY: add to N only, never touch r
+      const rc = rCrit(ph.gm, T, Cm, Ce);
+      if (Cm > Ce && rc < Infinity) {
+        const J     = jRate(ph, rc, T, Cm, Ce, D);
+        const dNraw = J * dt;
+        if (dNraw > 0 && rc > 0) {
+          const Vn   = 4 / 3 * Math.PI * rc ** 3;
+          const dCa  = (Cm - Ce) * MAX_DEP;
+          const dNmax = Vn > 0 ? dCa * Vm / (Cp_p * Vn) : 0;
+          const dN   = Math.min(dNraw, Math.max(dNmax, 0));
+          if (dN > 0) {
+            if (N < 1) { r = rc * 1.05; N = dN; }   // bootstrap first nuclei
+            else        N += dN;                       // count only — r unchanged
+          }
+        }
+      }
+
+      // (C) Volume fraction
+      const Vp = r > 0 ? 4 / 3 * Math.PI * r ** 3 : 0;
+      const f  = Math.min(N * Vp, 0.95 * Cp_p);
+
+      // (D) Store
+      rNow[i] = r; nNow[i] = N; fNow[i] = f;
+      rOut[i][s] = r; nOut[i][s] = N; fOut[i][s] = f;
+    }
+  }
+
+  // ── Hardness post-processing ─────────────────────────────────────────
+  const HVarr = new Float32Array(nSteps);
+  for (let s = 0; s < nSteps; s++) {
+    HVarr[s] = computeHV(PHASES.map((ph, i) => ({ f: fOut[i][s], r: rOut[i][s], rtr: ph.rtr })));
+  }
+  let pkIdx = 0;
+  for (let s = 1; s < nSteps; s++) if (HVarr[s] > HVarr[pkIdx]) pkIdx = s;
+
+  return {
+    tarr, HVarr, rOut, fOut, nOut, active, Cearr, T_C, C0,
+    pkIdx,
+    peakHV  : HVarr[pkIdx],
+    peakTime: tarr[pkIdx] / 3600,
+    maxF    : Math.max(...fOut.map(f => Math.max(...f))) * 100,
+    maxR    : Math.max(...rOut.map(r => Math.max(...r))) * 1e9,
+  };
+}
+
+/* ── Chart management ─────────────────────────────────────────────────── */
+const charts = {};
+
+/** Create or replace a Chart.js line chart */
+function mkChart(id, datasets, yLabel) {
+  const cv = document.getElementById(id);
+  if (!cv) return;
+  if (charts[id]) charts[id].destroy();
+
+  // Size canvas to wrapper
+  const wrap = cv.parentElement;
+  const dpr  = window.devicePixelRatio || 1;
+  cv.width   = wrap.offsetWidth  * dpr;
+  cv.height  = wrap.offsetHeight * dpr;
+  cv.style.width  = wrap.offsetWidth  + 'px';
+  cv.style.height = wrap.offsetHeight + 'px';
+
+  charts[id] = new Chart(cv, {
+    type: 'line',
+    data: { datasets },
+    options: {
+      responsive: false,
+      animation : false,
+      parsing   : false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#151620',
+          titleColor      : '#e2e4f0',
+          bodyColor       : '#9ca3af',
+          borderColor     : '#1e2035',
+          borderWidth     : 1,
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.raw.y.toFixed(3)}`
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: 'logarithmic',
+          grid : { color: '#1e2035' },
+          ticks: {
+            color: '#6b7080',
+            font : { size: 9 },
+            callback: v => {
+              const s = [1, 10, 100, 1000, 10000];
+              return s.includes(Math.round(v)) ? v + 'h' : '';
+            }
+          }
+        },
+        y: {
+          title: { display: true, text: yLabel, color: '#6b7080', font: { size: 9 } },
+          grid : { color: '#1e2035' },
+          ticks: { color: '#6b7080', font: { size: 9 } }
+        }
+      }
+    }
+  });
+}
+
+/** Downsample simulation data to ≤300 points for chart performance */
+function toPoints(tarr, arr, scale) {
+  const pts    = [];
+  const stride = Math.max(1, Math.floor(tarr.length / 300));
+  for (let i = 0; i < tarr.length; i += stride) {
+    pts.push({ x: tarr[i] / 3600, y: arr[i] * scale });
+  }
+  return pts;
+}
+
+/** Render all three charts from simulation results */
+function drawCharts(S) {
+  // Hardness
+  const hvDS = [{
+    label: 'HV', data: toPoints(S.tarr, S.HVarr, 1),
+    borderColor: '#FBBF24', borderWidth: 2, pointRadius: 0, tension: 0.3
+  }];
+  if (S.peakHV > HV0 + 1) {
+    hvDS.push({
+      label: 'Peak', data: [{ x: S.peakTime, y: S.peakHV }],
+      borderColor: '#F87171', backgroundColor: '#F87171',
+      pointRadius: 6, pointHoverRadius: 8, showLine: false
+    });
+  }
+  mkChart('cvHV', hvDS, 'HV');
+
+  // Radius
+  const rDS = PHASES.map((ph, i) => {
+    if (!S.active[i]) return null;
+    const stride = Math.max(1, Math.floor(S.tarr.length / 300));
+    const pts = [];
+    for (let s = 0; s < S.tarr.length; s += stride) {
+      if (S.nOut[i][s] > 1) pts.push({ x: S.tarr[s] / 3600, y: S.rOut[i][s] * 1e9 });
+    }
+    return pts.length < 2 ? null : {
+      label: ph.lb, data: pts, borderColor: ph.col,
+      borderWidth: 1.8, pointRadius: 0, tension: 0.3
+    };
+  }).filter(Boolean);
+  if (rDS.length) mkChart('cvR', rDS, 'r̄ (nm)');
+
+  // Volume fraction
+  const fDS = PHASES.map((ph, i) => {
+    if (!S.active[i]) return null;
+    const stride = Math.max(1, Math.floor(S.tarr.length / 300));
+    const pts = [];
+    for (let s = 0; s < S.tarr.length; s += stride) {
+      if (S.nOut[i][s] > 1) pts.push({ x: S.tarr[s] / 3600, y: S.fOut[i][s] * 100 });
+    }
+    return pts.length < 2 ? null : {
+      label: ph.lb, data: pts, borderColor: ph.col,
+      borderWidth: 1.8, pointRadius: 0, tension: 0.3
+    };
+  }).filter(Boolean);
+  if (fDS.length) mkChart('cvF', fDS, 'f (%)');
+}
+
+/** Update status pills in the top bar */
+function updatePills(S) {
+  document.getElementById('pill-HV').textContent = S.peakHV.toFixed(1) + ' HV';
+  document.getElementById('pill-t').textContent  = S.peakTime.toFixed(1) + ' h';
+  document.getElementById('pill-f').textContent  = S.maxF.toFixed(2) + '%';
+  document.getElementById('pill-r').textContent  = S.maxR.toFixed(1) + ' nm';
+}
+
+/** Dim/activate phase legend rows */
+function updatePhaseLegend(S) {
+  PHASES.forEach((ph, i) => {
+    const el = document.getElementById(ph.pid);
+    el.classList.toggle('active', S.active[i]);
+    el.style.opacity = S.active[i] ? '1' : '0.3';
+  });
+}
+
+/** Hide all idle overlays */
+function hideIdles() {
+  ['idle-hv', 'idle-r', 'idle-f', 'idle-micro'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+}
+
+/* ── Microstructure canvas ────────────────────────────────────────────── */
+
+/**
+ * Deterministic PRNG (Mulberry32) — same seed gives same particle layout,
+ * so scrubbing the time slider doesn't cause jitter.
+ */
+function mulberry32(seed) {
+  return function () {
+    seed += 0x6D2B79F5;
+    let t = seed;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Draw a schematic 2D microstructure on the micro canvas.
+ *
+ * Precipitate morphologies:
+ *   GP zones → small circles (coherent, equiaxed)
+ *   θ''      → thin disc/needle (coherent, highly oblate)
+ *   θ'       → semi-coherent disc (less oblate)
+ *   θ        → blocky rectangle (incoherent equilibrium)
+ *
+ * @param {Object} S     - Simulation results
+ * @param {number} frac  - Time fraction 0–1 (from inspect slider)
+ */
+function drawMicro(S, frac) {
+  if (!S) return;
+  const idx    = Math.min(Math.floor(frac * (S.tarr.length - 1)), S.tarr.length - 1);
+  const t_h    = (S.tarr[idx] / 3600).toFixed(2);
+  document.getElementById('micro-time-tag').textContent = `t = ${t_h} h`;
+  document.getElementById('lbl-inspect').textContent    = (frac * 100).toFixed(0) + '%';
+
+  const cv  = document.getElementById('micro');
+  const W   = cv.offsetWidth || 400;
+  const H   = 170;
+  const dpr = window.devicePixelRatio || 1;
+  cv.width  = W * dpr;
+  cv.height = H * dpr;
+  cv.style.width  = W + 'px';
+  cv.style.height = H + 'px';
+
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+
+  // Matrix background — subtle grain texture
+  ctx.fillStyle = '#060810';
+  ctx.fillRect(0, 0, W, H);
+
+  // Grain boundary lines (decorative — represent Al matrix grains)
+  const rngGB = mulberry32(42);
+  ctx.strokeStyle = '#0d1525';
+  ctx.lineWidth   = 1.2;
+  ctx.globalAlpha = 0.6;
+  for (let g = 0; g < 4; g++) {
+    ctx.beginPath();
+    const x0 = rngGB() * W, y0 = 0;
+    ctx.moveTo(x0, y0);
+    let cx = x0;
+    while (cx < W + 40) {
+      const nx = cx + rngGB() * 60 + 20;
+      const ny = rngGB() * H;
+      ctx.lineTo(nx, ny);
+      cx = nx;
+    }
+    ctx.stroke();
+  }
+
+  // Dislocation lines
+  const rngD = mulberry32(idx + 999);
+  ctx.strokeStyle = '#1a2540';
+  ctx.lineWidth   = 0.7;
+  ctx.globalAlpha = 0.5;
+  for (let d = 0; d < 6; d++) {
+    const y0 = rngD() * H;
+    ctx.beginPath();
+    ctx.moveTo(0, y0);
+    let x = 0;
+    while (x < W) {
+      const nx = x + rngD() * 25 + 8;
+      const ny = y0 + (rngD() - 0.5) * 12;
+      ctx.lineTo(nx, ny);
+      x = nx;
+    }
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  const infoLines = [];
+
+  // Draw precipitates for each active phase
+  for (let i = 0; i < 4; i++) {
+    if (!S.active[i]) continue;
+    const ph  = PHASES[i];
+    const r_m = S.rOut[i][idx];
+    const N   = S.nOut[i][idx];
+    const f   = S.fOut[i][idx];
+    if (N < 1 || r_m <= 0) continue;
+
+    const r_nm  = r_m * 1e9;
+    // Scale visual radius: log-compress so tiny GP zones and large θ are both visible
+    const drawR = Math.max(2.5, Math.min(4 + Math.log10(r_nm + 1) * 9, 26));
+    // Number of drawn particles: proxy for number density (capped for performance)
+    const nDraw = Math.min(Math.round(Math.sqrt(N / 1e18) * 0.8 + Math.sqrt(f) * 70) + 6, 130);
+
+    const rng = mulberry32(i * 31 + idx * 7);
+
+    ctx.globalAlpha = 0.88;
+    ctx.fillStyle   = ph.col;
+    ctx.strokeStyle = ph.col + '66';
+    ctx.lineWidth   = 0.5;
+
+    for (let k = 0; k < nDraw; k++) {
+      const x = rng() * W;
+      const y = rng() * H;
+      ctx.beginPath();
+
+      if (i === 0) {
+        // GP zones: small filled circles
+        ctx.arc(x, y, drawR * 0.45, 0, Math.PI * 2);
+
+      } else if (i === 1) {
+        // θ'': thin oblate discs (viewed edge-on or face-on randomly)
+        const edgeOn = rng() > 0.45;
+        if (edgeOn) {
+          ctx.ellipse(x, y, drawR * 1.2, drawR * 0.18, rng() * Math.PI, 0, Math.PI * 2);
+        } else {
+          ctx.ellipse(x, y, drawR * 0.55, drawR * 0.55, 0, 0, Math.PI * 2);
+        }
+
+      } else if (i === 2) {
+        // θ': semi-coherent discs (thicker than θ'')
+        const edgeOn = rng() > 0.5;
+        if (edgeOn) {
+          ctx.ellipse(x, y, drawR * 1.0, drawR * 0.30, rng() * Math.PI, 0, Math.PI * 2);
+        } else {
+          ctx.ellipse(x, y, drawR * 0.7, drawR * 0.7, 0, 0, Math.PI * 2);
+        }
+
+      } else {
+        // θ: blocky equilibrium plates/rectangles
+        const s = drawR * 0.72;
+        const ang = rng() * 0.4 - 0.2;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(ang);
+        ctx.rect(-s, -s * 0.55, s * 2, s * 1.1);
+        ctx.restore();
+        ctx.fill();
+        ctx.stroke();
+        continue;
+      }
+
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    infoLines.push(`${ph.lb}: r̄=${r_nm.toFixed(1)} nm  f=${(f * 100).toFixed(3)}%  N=${N.toExponential(1)} m⁻³`);
+  }
+
+  // Update info strip below canvas
+  const mi = document.getElementById('micro-info');
+  if (infoLines.length) {
+    mi.innerHTML = infoLines.map(l => `<span>${l}</span>`).join('&emsp;|&emsp;');
+  } else {
+    mi.textContent = 'No active precipitates at this time step';
+  }
+}
+
+/* ── Main run function ────────────────────────────────────────────────── */
+let SIM = null;
+
+function runSim() {
+  const btn = document.getElementById('run-btn');
+  btn.textContent = '⏳ Running…';
+  btn.classList.add('running');
+
+  // Defer to next frame so the UI updates before the heavy computation
+  setTimeout(() => {
+    const T_C   = +document.getElementById('sl-T').value;
+    const tmax  = +document.getElementById('sl-t').value;
+    const C0wt  = +document.getElementById('sl-C').value;
+    const nStep = +document.getElementById('sl-N').value;
+
+    // Rough wt% → mol frac conversion for Al-Cu
+    const C0 = (C0wt / 100) * 0.425;
+
+    SIM = simulate(T_C, tmax, nStep, C0);
+    drawCharts(SIM);
+    updatePills(SIM);
+    updatePhaseLegend(SIM);
+    drawMicro(SIM, +document.getElementById('sl-inspect').value / 100);
+    hideIdles();
+
+    btn.textContent = '▶ Run Simulation';
+    btn.classList.remove('running');
+  }, 30);
+}
+
+/* ── Slider live-update listeners ─────────────────────────────────────── */
+document.getElementById('sl-T').addEventListener('input', e => {
+  document.getElementById('lbl-T').textContent = e.target.value + ' °C';
+});
+document.getElementById('sl-t').addEventListener('input', e => {
+  document.getElementById('lbl-t').textContent = e.target.value + ' h';
+});
+document.getElementById('sl-C').addEventListener('input', e => {
+  document.getElementById('lbl-C').textContent = (+e.target.value).toFixed(1) + ' wt%';
+});
+document.getElementById('sl-N').addEventListener('input', e => {
+  document.getElementById('lbl-N').textContent = e.target.value + ' steps';
+});
+document.getElementById('sl-inspect').addEventListener('input', e => {
+  if (SIM) drawMicro(SIM, +e.target.value / 100);
+});
+
+/* ── Auto-run on load ─────────────────────────────────────────────────── */
+window.addEventListener('load', () => { runSim(); });
+</script>
+
+</body>
+</html>
